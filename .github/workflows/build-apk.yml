@@ -1,0 +1,46 @@
+name: Build launcher APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "cambios-launcher.zip"
+      - "fondo.jpg"
+      - ".github/workflows/build-apk.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply my changes from cambios-launcher.zip
+        run: |
+          unzip -o cambios-launcher.zip
+          if [ -f fondo.jpg ]; then mkdir -p launcher/app/src/main/res/raw && cp fondo.jpg launcher/app/src/main/res/raw/default_wallpaper.jpg; fi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platforms;android-34 build-tools;34.0.0
+      - name: Build the APK
+        working-directory: launcher
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+      - name: Publish the APK as a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK=$(ls launcher/app/build/outputs/apk/release/*.apk | head -1)
+          cp "$APK" launcher-personalizado.apk
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest launcher-personalizado.apk \
+            --title "Launcher personalizado" \
+            --notes "APK compilado automaticamente por GitHub Actions." \
+            --target "${{ github.sha }}"
